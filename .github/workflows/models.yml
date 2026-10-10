@@ -23,7 +23,11 @@ jobs:
                    lada_mosaic_restoration_model_generic_v1.2.pth; do
             curl -fL --retry 3 -O "https://huggingface.co/ladaapp/lada/resolve/main/$f"
           done
-          sha256sum lada_* > SHA256SUMS.txt
+          P="https://github.com/sczhou/ProPainter/releases/download/v0.1.0"
+          for f in ProPainter.pth raft-things.pth recurrent_flow_completion.pth; do
+            curl -fL --retry 3 -O "$P/$f"
+          done
+          sha256sum lada_* ProPainter.pth raft-things.pth recurrent_flow_completion.pth > SHA256SUMS.txt
           ls -la
 
       - name: 发布到 models-v1 Release
@@ -38,5 +42,5 @@ jobs:
           gh release upload models-v1 --repo ceoifung/yingzhen-pub --clobber \
             lada_mosaic_detection_model_v4_fast.pt lada_mosaic_detection_model_v4_accurate.pt \
             lada_mosaic_detection_model_v2.pt lada_mosaic_restoration_model_generic_v1.2.pth \
-            SHA256SUMS.txt
+            ProPainter.pth raft-things.pth recurrent_flow_completion.pth SHA256SUMS.txt
           echo "上传完成"
