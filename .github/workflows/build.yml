@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '版本 tag（如 v0.1.0）'
+        description: '版本 tag（如 v0.2.0）'
         required: true
-        default: 'v0.1.0'
+        default: 'v0.2.0'
 
 jobs:
   build:
@@ -98,19 +98,18 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: |
           mv dist/YingZhen "pkg/映真RestoreStudio"
-          cp -r lada/model_weights "pkg/映真RestoreStudio/lada_model_weights_tmp"
           mkdir -p "pkg/映真RestoreStudio/lada"
-          mv "pkg/映真RestoreStudio/lada_model_weights_tmp" "pkg/映真RestoreStudio/lada/model_weights"
-          cat > "pkg/映真RestoreStudio/使用说明.txt" <<'NOTE'
-映真 Restore Studio — GPU 视频去马赛克
-======================================
-1. 双击 YingZhen.exe
-2. 拖入视频 → 开始处理; 或用左栏「批量后台处理」多视频排队
-3. 成品默认在 results 目录; 批量模式存到源视频旁边(xxx_去马赛克.mp4)
-
-本构建为 CPU 版(无需独立显卡, 速度较慢); 有 NVIDIA 显卡可从私有源码部署 GPU 版。
-基于开源项目 Lada(AGPL-3.0) 等构建。
-NOTE
+          cp -r lada/model_weights "pkg/映真RestoreStudio/lada/model_weights"
+          printf '%s\n' \
+            "映真 Restore Studio — 视频去马赛克" \
+            "======================================" \
+            "1. 双击 YingZhen.exe" \
+            "2. 拖入视频 → 开始处理; 或用左栏「批量后台处理」多视频排队" \
+            "3. 成品默认在 results 目录; 批量模式存到源视频旁边(xxx_去马赛克.mp4)" \
+            "" \
+            "本构建为 CPU 版(无需独立显卡, 速度较慢); 有 NVIDIA 显卡可从源码部署 GPU 版。" \
+            "基于开源项目 Lada(AGPL-3.0) 等构建。" \
+            > "pkg/映真RestoreStudio/使用说明.txt"
           cd pkg && 7z a -tzip "yingzhen-${{ env.VERSION }}-win64.zip" "映真RestoreStudio" && ls -la *.zip
 
       - name: 创建 Release 并上传
@@ -119,10 +118,9 @@ NOTE
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          NOTES="映真 Restore Studio ${{ env.VERSION }} — 自动构建(CPU版, 解压即用)。基于 Lada(AGPL-3.0)。源码私有, 问题反馈请到 Issues。"
           gh release create "$TAG" --repo ceoifung/yingzhen-pub \
             --title "映真 YingZhen $TAG" \
-            --notes "映真 Restore Studio ${{ env.VERSION }} — 自动构建(CPU版, 解压即用)
-
-基于 Lada(AGPL-3.0)。源码私有, 问题反馈请到 Issues。" \
+            --notes "$NOTES" \
             --target main \
             "yingzhen-${{ env.VERSION }}-win64.zip"
