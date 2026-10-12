@@ -37,7 +37,7 @@ jobs:
           TOKEN: ${{ secrets.PRIVATE_PULL_TOKEN }}
         run: |
           git clone --depth 1 --recurse-submodules --shallow-submodules --branch "$TAG" \
-            "https://x-access-token:${TOKEN}@github.com/ceoifung/yingzhen.git" app
+            "https://x-access-token:${TOKEN}@github.com/ceoifung/restore-studio.git" app
           cd app && git log --oneline -1 && ls lada | head -5
 
       - uses: actions/setup-python@v5
@@ -87,7 +87,7 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: |
           python -m PyInstaller --noconfirm --windowed \
-            --name "YingZhen" --icon=launcher/app.ico \
+            --name "RestoreStudio" --icon=launcher/app.ico \
             --collect-all lada --collect-all ultralytics --collect-all mmengine \
             --paths=. desktop_app.py
 
@@ -97,20 +97,20 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          mv dist/YingZhen "pkg/映真RestoreStudio"
+          mv dist/RestoreStudio "pkg/映真RestoreStudio"
           mkdir -p "pkg/映真RestoreStudio/lada"
           cp -r lada/model_weights "pkg/映真RestoreStudio/lada/model_weights"
           printf '%s\n' \
             "映真 Restore Studio — 视频去马赛克" \
             "======================================" \
-            "1. 双击 YingZhen.exe" \
+            "1. 双击 RestoreStudio.exe" \
             "2. 拖入视频 → 开始处理; 或用左栏「批量后台处理」多视频排队" \
             "3. 成品默认在 results 目录; 批量模式存到源视频旁边(xxx_去马赛克.mp4)" \
             "" \
             "本构建为 CPU 版(无需独立显卡, 速度较慢); 有 NVIDIA 显卡可从源码部署 GPU 版。" \
             "基于开源项目 Lada(AGPL-3.0) 等构建。" \
             > "pkg/映真RestoreStudio/使用说明.txt"
-          cd pkg && 7z a -tzip "yingzhen-${{ env.VERSION }}-win64.zip" "映真RestoreStudio" && ls -la *.zip
+          cd pkg && 7z a -tzip "restore-studio-${{ env.VERSION }}-win64.zip" "映真RestoreStudio" && ls -la *.zip
 
       - name: 创建 Release 并上传
         shell: bash
@@ -119,8 +119,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NOTES="映真 Restore Studio ${{ env.VERSION }} — 自动构建(CPU版, 解压即用)。基于 Lada(AGPL-3.0)。源码私有, 问题反馈请到 Issues。"
-          gh release create "$TAG" --repo ceoifung/yingzhen-pub \
-            --title "映真 YingZhen $TAG" \
+          gh release create "$TAG" --repo ceoifung/restore-studio-pub \
+            --title "映真 RestoreStudio $TAG" \
             --notes "$NOTES" \
             --target main \
-            "yingzhen-${{ env.VERSION }}-win64.zip"
+            "restore-studio-${{ env.VERSION }}-win64.zip"

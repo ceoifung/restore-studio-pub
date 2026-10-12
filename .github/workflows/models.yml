@@ -36,10 +36,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view models-v1 --repo ceoifung/yingzhen-pub > /dev/null 2>&1 || \
-            gh release create models-v1 --repo ceoifung/yingzhen-pub \
+          gh release view models-v1 --repo ceoifung/restore-studio-pub > /dev/null 2>&1 || \
+            gh release create models-v1 --repo ceoifung/restore-studio-pub \
               --title "Lada 模型包" --notes "检测x3 + 修复x1, 供映真使用 | 放置: 程序文件夹内 lada/model_weights/ | 匿名可下载 | ProPainter 权重因授权限制仅在私有渠道提供"
-          gh release upload models-v1 --repo ceoifung/yingzhen-pub --clobber \
+          gh release upload models-v1 --repo ceoifung/restore-studio-pub --clobber \
             lada_mosaic_detection_model_v4_fast.pt lada_mosaic_detection_model_v4_accurate.pt \
             lada_mosaic_detection_model_v2.pt lada_mosaic_restoration_model_generic_v1.2.pth \
             ProPainter.pth raft-things.pth recurrent_flow_completion.pth SHA256SUMS.txt
