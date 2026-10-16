@@ -1,3 +1,11 @@
+# ============================================
+# restore-studio-pub 仓库 .github/workflows/build.yml (v0.3.0+, Nuitka 双平台)
+# 触发: 私有仓库打 v* tag → build-trigger.yml 以 repository_dispatch 通知本仓库;
+#       或手动 workflow_dispatch 传 tag
+# 依赖 secret: PRIVATE_PULL_TOKEN (拉取私有仓库 ceoifung/restore-studio 的 token)
+# 产物: RestoreStudio-windows-cuda.zip / RestoreStudio-linux-cuda.tar.gz → 挂到 Release
+# 用时: 每平台约 60-150 分钟 (Nuitka 全量编译 + CUDA torch 下载)
+# ============================================
 name: Build Release
 
 on:
@@ -6,14 +14,23 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '版本 tag（如 v0.2.0）'
+        description: '版本 tag（如 v0.3.0）'
         required: true
-        default: 'v0.2.0'
+        default: 'v0.3.0'
 
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: RestoreStudio-windows-cuda
+          # ubuntu-22.04 而非 latest: 旧 glibc(2.35) 保证产物在 Debian11+/Ubuntu22.04+ 可运行
+          - os: ubuntu-22.04
+            artifact: RestoreStudio-linux-cuda
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
     permissions:
       contents: write
 
@@ -26,101 +43,60 @@ jobs:
           else
             TAG="${{ github.event.inputs.tag }}"
           fi
-          VERSION="${TAG#v}"
           echo "TAG=$TAG" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "构建版本: $TAG (VERSION=$VERSION)"
+          echo "构建版本: $TAG"
 
-      - name: 拉取私有仓库源码(含子模块)
+      - name: 拉取私有仓库源码(含 lada 子模块)
         shell: bash
         env:
           TOKEN: ${{ secrets.PRIVATE_PULL_TOKEN }}
         run: |
           git clone --depth 1 --recurse-submodules --shallow-submodules --branch "$TAG" \
             "https://x-access-token:${TOKEN}@github.com/ceoifung/restore-studio.git" app
-          cd app && git log --oneline -1 && ls lada | head -5
+          cd app && git log --oneline -1 && ls lada/lada | head -3
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: 安装依赖
+      # Windows runner C 盘仅 ~14GB, CUDA torch+产物会占满; 缓存与临时目录放 D 盘
+      - name: 磁盘腾挪 (Windows)
+        if: runner.os == 'Windows'
         shell: bash
-        working-directory: app
         run: |
-          python -m pip install -U pip
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install "PySide6==6.9.1" opencv-python "av>=16.1" \
-            "ultralytics==8.4.4" "mmengine==0.10.7" \
-            tqdm wcwidth pyyaml requests pillow pyinstaller
-          pip install --no-deps ./lada
+          echo "PIP_CACHE_DIR=D:\\pipcache" >> $GITHUB_ENV
+          echo "TEMP=D:\\tmp" >> $GITHUB_ENV
+          echo "TMP=D:\\tmp" >> $GITHUB_ENV
+          mkdir -p /d/pipcache /d/tmp
 
-      - name: 下载 Lada 预训练模型
-        shell: bash
+      - name: 构建 (Windows, Nuitka CUDA)
+        if: runner.os == 'Windows'
+        shell: pwsh
         working-directory: app
-        run: |
-          mkdir -p lada/model_weights
-          for f in lada_mosaic_detection_model_v4_fast.pt \
-                   lada_mosaic_detection_model_v4_accurate.pt \
-                   lada_mosaic_detection_model_v2.pt \
-                   lada_mosaic_restoration_model_generic_v1.2.pth; do
-            curl -fL --retry 3 -o "lada/model_weights/$f" \
-              "https://huggingface.co/ladaapp/lada/resolve/main/$f"
-          done
-          ls -la lada/model_weights
+        run: powershell -ExecutionPolicy Bypass -File scripts/build_nuitka.ps1
 
-      - name: 下载 ffmpeg
-        shell: bash
+      - name: 构建 (Linux, Nuitka CUDA)
+        if: runner.os == 'Linux'
         working-directory: app
-        run: |
-          curl -fL --retry 3 -o ffmpeg.zip \
-            "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-          7z x ffmpeg.zip -offmpeg_tmp -y > /dev/null
-          mkdir -p pkg/ffmpeg/bin
-          cp ffmpeg_tmp/ffmpeg-*/bin/ffmpeg.exe ffmpeg_tmp/ffmpeg-*/bin/ffprobe.exe pkg/ffmpeg/bin/
-          rm -rf ffmpeg.zip ffmpeg_tmp
+        run: bash scripts/build_linux_nuitka.sh
 
-      - name: 构建 exe
+      - name: 压缩产物
         shell: bash
-        working-directory: app
-        env:
-          PYTHONIOENCODING: utf-8
+        working-directory: app/build-nuitka
         run: |
-          python -m PyInstaller --noconfirm --windowed \
-            --name "RestoreStudio" --icon=launcher/app.ico \
-            --collect-all lada --collect-all ultralytics --collect-all mmengine \
-            --paths=. desktop_app.py
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip "${{ matrix.artifact }}.zip" desktop_app.dist
+          else
+            tar -I "gzip -1" -cf "${{ matrix.artifact }}.tar.gz" desktop_app.dist
+          fi
+          ls -lh
 
-      - name: 组装完整包并压缩
-        shell: bash
-        working-directory: app
-        env:
-          PYTHONIOENCODING: utf-8
-        run: |
-          mv dist/RestoreStudio "pkg/映真RestoreStudio"
-          mkdir -p "pkg/映真RestoreStudio/lada"
-          cp -r lada/model_weights "pkg/映真RestoreStudio/lada/model_weights"
-          printf '%s\n' \
-            "映真 Restore Studio — 视频去马赛克" \
-            "======================================" \
-            "1. 双击 RestoreStudio.exe" \
-            "2. 拖入视频 → 开始处理; 或用左栏「批量后台处理」多视频排队" \
-            "3. 成品默认在 results 目录; 批量模式存到源视频旁边(xxx_去马赛克.mp4)" \
-            "" \
-            "本构建为 CPU 版(无需独立显卡, 速度较慢); 有 NVIDIA 显卡可从源码部署 GPU 版。" \
-            "基于开源项目 Lada(AGPL-3.0) 等构建。" \
-            > "pkg/映真RestoreStudio/使用说明.txt"
-          cd pkg && 7z a -tzip "restore-studio-${{ env.VERSION }}-win64.zip" "映真RestoreStudio" && ls -la *.zip
-
-      - name: 创建 Release 并上传
-        shell: bash
-        working-directory: app/pkg
+      - name: 附到 Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        working-directory: app/build-nuitka
         run: |
-          NOTES="映真 Restore Studio ${{ env.VERSION }} — 自动构建(CPU版, 解压即用)。基于 Lada(AGPL-3.0)。源码私有, 问题反馈请到 Issues。"
-          gh release create "$TAG" --repo ceoifung/restore-studio-pub \
-            --title "映真 RestoreStudio $TAG" \
-            --notes "$NOTES" \
-            --target main \
-            "restore-studio-${{ env.VERSION }}-win64.zip"
+          FILE="${{ matrix.artifact }}.$([ "$RUNNER_OS" = "Windows" ] && echo zip || echo tar.gz)"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --generate-notes --title "$TAG"
+          gh release upload "$TAG" "$FILE" --clobber
