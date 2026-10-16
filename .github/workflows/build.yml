@@ -100,6 +100,14 @@ jobs:
           fi
           ls -lh
 
+      - name: 上传构建产物 (保险: Release 步骤失败时可直接下载)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: app/build-nuitka/RestoreStudio-*
+          compression-level: 0
+          retention-days: 14
+
       - name: 附到 Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,5 +115,5 @@ jobs:
         working-directory: app/build-nuitka
         run: |
           FILE="${{ matrix.artifact }}.$([ "$RUNNER_OS" = "Windows" ] && echo zip || echo tar.gz)"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --generate-notes --title "$TAG"
-          gh release upload "$TAG" "$FILE" --clobber
+          gh release view "$TAG" -R ceoifung/restore-studio-pub >/dev/null 2>&1 || gh release create "$TAG" -R ceoifung/restore-studio-pub --generate-notes --title "$TAG"
+          gh release upload "$TAG" "$FILE" -R ceoifung/restore-studio-pub --clobber
