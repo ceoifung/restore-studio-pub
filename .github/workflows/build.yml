@@ -73,7 +73,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         working-directory: app
-        run: powershell -ExecutionPolicy Bypass -File scripts/build_nuitka.ps1
+        run: pwsh -NoProfile -File scripts/build_nuitka.ps1
 
       - name: 构建 (Linux, Nuitka CUDA)
         if: runner.os == 'Linux'
