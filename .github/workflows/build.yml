@@ -89,14 +89,19 @@ jobs:
         working-directory: app
         run: bash scripts/build_linux_nuitka.sh
 
-      - name: 压缩产物
+      # GitHub Release 单文件上限 2GB, CUDA 包超限 → 分卷 ≤1.9GB
+      # Windows: .zip.001/.002 (7-Zip/WinRAR 直接解压第一个分卷)
+      # Linux:   .tar.gz.part00/01 (cat *.part* > x.tar.gz 后解压)
+      - name: 压缩产物 (分卷)
         shell: bash
         working-directory: app/build-nuitka
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            7z a -tzip "${{ matrix.artifact }}.zip" desktop_app.dist
+            7z a -tzip -v1900m "${{ matrix.artifact }}.zip" desktop_app.dist
           else
             tar -I "gzip -1" -cf "${{ matrix.artifact }}.tar.gz" desktop_app.dist
+            split -b 1900M -d "${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}.tar.gz.part"
+            rm -f "${{ matrix.artifact }}.tar.gz"
           fi
           ls -lh
 
@@ -114,6 +119,12 @@ jobs:
         shell: bash
         working-directory: app/build-nuitka
         run: |
-          FILE="${{ matrix.artifact }}.$([ "$RUNNER_OS" = "Windows" ] && echo zip || echo tar.gz)"
-          gh release view "$TAG" -R ceoifung/restore-studio-pub >/dev/null 2>&1 || gh release create "$TAG" -R ceoifung/restore-studio-pub --generate-notes --title "$TAG"
-          gh release upload "$TAG" "$FILE" -R ceoifung/restore-studio-pub --clobber
+          NOTES="CUDA 版采用分卷压缩 (GitHub 单文件 2GB 限制)。
+          Windows: 下载全部 .zip.00x 分卷放同一目录, 用 7-Zip/WinRAR 解压第一个分卷即可。
+          Linux: 下载全部 .tar.gz.part* 后执行 cat *.tar.gz.part* > RestoreStudio.tar.gz && tar xzf RestoreStudio.tar.gz"
+          gh release view "$TAG" -R ceoifung/restore-studio-pub >/dev/null 2>&1 \
+            || gh release create "$TAG" -R ceoifung/restore-studio-pub --title "$TAG" --notes "$NOTES"
+          for F in ${{ matrix.artifact }}.zip.* ${{ matrix.artifact }}.tar.gz.part*; do
+            [ -e "$F" ] || continue
+            gh release upload "$TAG" "$F" -R ceoifung/restore-studio-pub --clobber
+          done
